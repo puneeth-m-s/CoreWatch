@@ -1,0 +1,255 @@
+{% extends "base.html" %}
+
+{% block title %}System Info - Corewatch{% endblock %}
+{% block page_title %}System Information{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-desktop"></i> System Overview</h5>
+            </div>
+            <div class="card-body" id="system-overview">
+                <div class="text-muted text-center">Loading system information...</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-microchip"></i> Processor Information</h5>
+            </div>
+            <div class="card-body" id="processor-info">
+                <div class="text-muted text-center">Loading...</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-memory"></i> Memory Information</h5>
+            </div>
+            <div class="card-body" id="memory-info">
+                <div class="text-muted text-center">Loading...</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-thermometer-half"></i> Temperature Sensors</h5>
+            </div>
+            <div class="card-body" id="temperature-sensors" style="max-height: 300px; overflow-y: auto;">
+                <div class="text-muted text-center">Loading...</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-battery-half"></i> Power Information</h5>
+            </div>
+            <div class="card-body" id="power-info">
+                <div class="text-muted text-center">Loading...</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-chart-line"></i> System Uptime & Performance</h5>
+            </div>
+            <div class="card-body" id="uptime-info">
+                <div class="text-muted text-center">Loading...</div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function updateSystemData(data) {
+        const info = data.system_info;
+        
+        // Update system overview
+        const overviewContainer = document.getElementById('system-overview');
+        overviewContainer.innerHTML = `
+            <div class="row">
+                <div class="col-md-3 text-center">
+                    <i class="fas fa-desktop fa-3x text-primary mb-2"></i>
+                    <h6>Platform</h6>
+                    <p class="text-muted">${info.system.platform}</p>
+                </div>
+                <div class="col-md-3 text-center">
+                    <i class="fas fa-cogs fa-3x text-success mb-2"></i>
+                    <h6>Architecture</h6>
+                    <p class="text-muted">${info.system.architecture ? info.system.architecture.join(', ') : 'Unknown'}</p>
+                </div>
+                <div class="col-md-3 text-center">
+                    <i class="fas fa-microchip fa-3x text-warning mb-2"></i>
+                    <h6>CPU Cores</h6>
+                    <p class="text-muted">${info.cpu.count}</p>
+                </div>
+                <div class="col-md-3 text-center">
+                    <i class="fas fa-memory fa-3x text-info mb-2"></i>
+                    <h6>Total RAM</h6>
+                    <p class="text-muted">${formatBytes(info.memory.total)}</p>
+                </div>
+            </div>
+        `;
+
+        // Update processor information
+        const processorContainer = document.getElementById('processor-info');
+        processorContainer.innerHTML = `
+            <div class="mb-3">
+                <strong>Processor:</strong>
+                <p class="text-muted">${info.system.processor || 'Unknown'}</p>
+            </div>
+            <div class="mb-3">
+                <strong>CPU Cores:</strong>
+                <p class="text-muted">${info.cpu.count} cores</p>
+            </div>
+            <div class="mb-3">
+                <strong>Current Usage:</strong>
+                <div class="progress">
+                    <div class="progress-bar ${getProgressClass(info.cpu.percent)}" 
+                         style="width: ${info.cpu.percent}%">${info.cpu.percent.toFixed(1)}%</div>
+                </div>
+            </div>
+            ${info.cpu.frequency ? `
+            <div class="mb-3">
+                <strong>Frequency:</strong>
+                <p class="text-muted">Current: ${info.cpu.frequency.current.toFixed(0)} MHz</p>
+                ${info.cpu.frequency.min ? `<p class="text-muted">Min: ${info.cpu.frequency.min.toFixed(0)} MHz</p>` : ''}
+                ${info.cpu.frequency.max ? `<p class="text-muted">Max: ${info.cpu.frequency.max.toFixed(0)} MHz</p>` : ''}
+            </div>
+            ` : ''}
+        `;
+
+        // Update memory information
+        const memoryContainer = document.getElementById('memory-info');
+        memoryContainer.innerHTML = `
+            <div class="mb-3">
+                <strong>Total Memory:</strong>
+                <p class="text-muted">${formatBytes(info.memory.total)}</p>
+            </div>
+            <div class="mb-3">
+                <strong>Available Memory:</strong>
+                <p class="text-muted">${formatBytes(info.memory.available)}</p>
+            </div>
+            <div class="mb-3">
+                <strong>Memory Usage:</strong>
+                <div class="progress">
+                    <div class="progress-bar ${getProgressClass(info.memory.percent)}" 
+                         style="width: ${info.memory.percent}%">${info.memory.percent.toFixed(1)}%</div>
+                </div>
+            </div>
+            <div class="mb-3">
+                <strong>Swap Memory:</strong>
+                <p class="text-muted">Total: ${formatBytes(info.swap.total)}</p>
+                <div class="progress">
+                    <div class="progress-bar ${getProgressClass(info.swap.percent)}" 
+                         style="width: ${info.swap.percent}%">${info.swap.percent.toFixed(1)}%</div>
+                </div>
+            </div>
+        `;
+
+        // Update temperature sensors
+        const tempContainer = document.getElementById('temperature-sensors');
+        if (Object.keys(info.temperatures).length > 0) {
+            let tempHtml = '';
+            for (const [sensorName, sensors] of Object.entries(info.temperatures)) {
+                tempHtml += `<h6>${sensorName}</h6>`;
+                sensors.forEach(sensor => {
+                    const tempClass = sensor.current > 40 ? 'text-danger' : sensor.current > 30 ? 'text-warning' : 'text-success';
+                    tempHtml += `
+                        <div class="mb-2">
+                            <div class="d-flex justify-content-between">
+                                <span>${sensor.label}</span>
+                                <span class="${tempClass}">${sensor.current.toFixed(1)}°C</span>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+            tempContainer.innerHTML = tempHtml;
+        } else {
+            tempContainer.innerHTML = '<div class="alert alert-info"><i class="fas fa-info-circle"></i> No temperature sensors detected</div>';
+        }
+
+        // Update power information
+        const powerContainer = document.getElementById('power-info');
+        if (info.battery) {
+            const batteryClass = info.battery.percent < 20 ? 'text-danger' : info.battery.percent < 50 ? 'text-warning' : 'text-success';
+            let timeRemaining = '';
+            if (!info.battery.power_plugged && info.battery.secsleft) {
+                const hours = Math.floor(info.battery.secsleft / 3600);
+                const minutes = Math.floor((info.battery.secsleft % 3600) / 60);
+                timeRemaining = `<p class="text-muted">Time remaining: ${hours}h ${minutes}m</p>`;
+            }
+            
+            powerContainer.innerHTML = `
+                <div class="mb-3">
+                    <strong>Battery Level:</strong>
+                    <div class="progress mt-2">
+                        <div class="progress-bar ${getProgressClass(100 - info.battery.percent)}" 
+                             style="width: ${info.battery.percent}%">${info.battery.percent.toFixed(1)}%</div>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <strong>Power Status:</strong>
+                    <p class="text-muted">
+                        <i class="fas fa-${info.battery.power_plugged ? 'plug' : 'battery-half'}"></i>
+                        ${info.battery.power_plugged ? 'Plugged In' : 'On Battery'}
+                    </p>
+                    ${timeRemaining}
+                </div>
+            `;
+        } else {
+            powerContainer.innerHTML = '<div class="alert alert-info"><i class="fas fa-info-circle"></i> No battery detected (Desktop system)</div>';
+        }
+
+        // Update uptime information
+        const uptimeContainer = document.getElementById('uptime-info');
+        const bootTime = new Date(info.system.boot_time * 1000);
+        const uptime = Date.now() - bootTime.getTime();
+        const uptimeDays = Math.floor(uptime / (1000 * 60 * 60 * 24));
+        const uptimeHours = Math.floor((uptime % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const uptimeMinutes = Math.floor((uptime % (1000 * 60 * 60)) / (1000 * 60));
+        
+        uptimeContainer.innerHTML = `
+            <div class="row">
+                <div class="col-md-4 text-center">
+                    <i class="fas fa-clock fa-2x text-primary mb-2"></i>
+                    <h6>System Uptime</h6>
+                    <p class="text-muted">${uptimeDays}d ${uptimeHours}h ${uptimeMinutes}m</p>
+                </div>
+                <div class="col-md-4 text-center">
+                    <i class="fas fa-calendar fa-2x text-success mb-2"></i>
+                    <h6>Boot Time</h6>
+                    <p class="text-muted">${bootTime.toLocaleString()}</p>
+                </div>
+                <div class="col-md-4 text-center">
+                    <i class="fas fa-tachometer-alt fa-2x text-warning mb-2"></i>
+                    <h6>Overall Performance</h6>
+                    <p class="text-muted">
+                        CPU: ${info.cpu.percent.toFixed(1)}% | 
+                        RAM: ${info.memory.percent.toFixed(1)}%
+                    </p>
+                </div>
+            </div>
+        `;
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+
+{% block title %}Network Monitor - Corewatch{% endblock %}
+{% block page_title %}Network Monitoring{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="card-body text-center">
+                <i class="fas fa-upload fa-2x mb-2"></i>
+                <div class="metric-value" id="bytes-sent">--</div>
+                <div class="metric-label">Bytes Sent</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="card-body text-center">
+                <i class="fas fa-download fa-2x mb-2"></i>
+                <div class="metric-value" id="bytes-recv">--</div>
+                <div class="metric-label">Bytes Received</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="card-body text-center">
+                <i class="fas fa-paper-plane fa-2x mb-2"></i>
+                <div class="metric-value" id="packets-sent">--</div>
+                <div class="metric-label">Packets Sent</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="card-body text-center">
+                <i class="fas fa-inbox fa-2x mb-2"></i>
+                <div class="metric-value" id="packets-recv">--</div>
+                <div class="metric-label">Packets Received</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-chart-line"></i> Network Activity</h5>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <canvas id="networkChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-wifi"></i> Network Interfaces</h5>
+            </div>
+            <div class="card-body" id="network-interfaces">
+                <div class="text-muted text-center">Loading...</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-chart-bar"></i> Network Statistics</h5>
+            </div>
+            <div class="card-body" id="network-stats">
+                <div class="text-muted text-center">Loading...</div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let networkChart;
+    let previousNetworkData = null;
+
+    function initializeCharts() {
+        const ctx = document.getElementById('networkChart').getContext('2d');
+        networkChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+                    {
+                        label: 'Bytes Sent/sec',
+                        data: [],
+                        borderColor: 'rgb(255, 99, 132)',
+                        backgroundColor: 'rgba(255, 99, 132, 0.1)',
+                        tension: 0.4
+                    },
+                    {
+                        label: 'Bytes Received/sec',
+                        data: [],
+                        borderColor: 'rgb(54, 162, 235)',
+                        backgroundColor: 'rgba(54, 162, 235, 0.1)',
+                        tension: 0.4
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                },
+                plugins: {
+                    legend: {
+                        position: 'top'
+                    }
+                }
+            }
+        });
+    }
+
+    function updateSystemData(data) {
+        const info = data.system_info;
+        
+        if (info.network.io) {
+            // Update metric cards
+            document.getElementById('bytes-sent').textContent = formatBytes(info.network.io.bytes_sent);
+            document.getElementById('bytes-recv').textContent = formatBytes(info.network.io.bytes_recv);
+            document.getElementById('packets-sent').textContent = info.network.io.packets_sent.toLocaleString();
+            document.getElementById('packets-recv').textContent = info.network.io.packets_recv.toLocaleString();
+
+            // Update network statistics
+            const statsContainer = document.getElementById('network-stats');
+            statsContainer.innerHTML = `
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between">
+                        <span>Total Bytes Sent</span>
+                        <span>${formatBytes(info.network.io.bytes_sent)}</span>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between">
+                        <span>Total Bytes Received</span>
+                        <span>${formatBytes(info.network.io.bytes_recv)}</span>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between">
+                        <span>Total Packets Sent</span>
+                        <span>${info.network.io.packets_sent.toLocaleString()}</span>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between">
+                        <span>Total Packets Received</span>
+                        <span>${info.network.io.packets_recv.toLocaleString()}</span>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between">
+                        <span>Errors In</span>
+                        <span>${info.network.io.errin || 0}</span>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between">
+                        <span>Errors Out</span>
+                        <span>${info.network.io.errout || 0}</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Update network chart with rate data
+        if (networkChart && data.history && data.history.network && data.history.network.length > 1) {
+            const labels = [];
+            const sentRates = [];
+            const recvRates = [];
+            
+            for (let i = 1; i < data.history.network.length; i++) {
+                const current = data.history.network[i];
+                const previous = data.history.network[i - 1];
+                const timeDiff = (new Date(current.timestamp) - new Date(previous.timestamp)) / 1000;
+                
+                if (timeDiff > 0) {
+                    const sentRate = (current.bytes_sent - previous.bytes_sent) / timeDiff;
+                    const recvRate = (current.bytes_recv - previous.bytes_recv) / timeDiff;
+                    
+                    labels.push(new Date(current.timestamp).toLocaleTimeString());
+                    sentRates.push(Math.max(0, sentRate));
+                    recvRates.push(Math.max(0, recvRate));
+                }
+            }
+            
+            networkChart.data.labels = labels;
+            networkChart.data.datasets[0].data = sentRates;
+            networkChart.data.datasets[1].data = recvRates;
+            networkChart.update('none');
+        }
+
+        // Update network interfaces (this would require additional psutil calls)
+        const interfacesContainer = document.getElementById('network-interfaces');
+        interfacesContainer.innerHTML = `
+            <div class="alert alert-info" role="alert">
+                <i class="fas fa-info-circle"></i> Network interface details require additional system calls.
+                Current monitoring shows aggregate network statistics.
+            </div>
+        `;
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        initializeCharts();
+    });
+</script>
+{% endblock %}

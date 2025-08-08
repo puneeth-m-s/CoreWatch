@@ -1,0 +1,249 @@
+{% extends "base.html" %}
+
+{% block title %}Memory Monitor - Corewatch{% endblock %}
+{% block page_title %}Memory Monitoring{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="card-body text-center">
+                <i class="fas fa-memory fa-2x mb-2"></i>
+                <div class="metric-value" id="memory-usage">--</div>
+                <div class="metric-label">Memory Usage</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="card-body text-center">
+                <i class="fas fa-hdd fa-2x mb-2"></i>
+                <div class="metric-value" id="memory-total">--</div>
+                <div class="metric-label">Total Memory</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="card-body text-center">
+                <i class="fas fa-check-circle fa-2x mb-2"></i>
+                <div class="metric-value" id="memory-available">--</div>
+                <div class="metric-label">Available</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="card-body text-center">
+                <i class="fas fa-exchange-alt fa-2x mb-2"></i>
+                <div class="metric-value" id="swap-usage">--</div>
+                <div class="metric-label">Swap Usage</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-chart-area"></i> Memory Usage History</h5>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <canvas id="memoryChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-chart-pie"></i> Memory Breakdown</h5>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <canvas id="memoryPieChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-info-circle"></i> Memory Details</h5>
+            </div>
+            <div class="card-body" id="memory-details">
+                <div class="text-muted text-center">Loading...</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-exchange-alt"></i> Swap Details</h5>
+            </div>
+            <div class="card-body" id="swap-details">
+                <div class="text-muted text-center">Loading...</div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let memoryChart, memoryPieChart;
+
+    function initializeCharts() {
+        // Memory usage history chart
+        const ctx1 = document.getElementById('memoryChart').getContext('2d');
+        memoryChart = new Chart(ctx1, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Memory Usage %',
+                    data: [],
+                    borderColor: 'rgb(54, 162, 235)',
+                    backgroundColor: 'rgba(54, 162, 235, 0.1)',
+                    tension: 0.4,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                }
+            }
+        });
+
+        // Memory breakdown pie chart
+        const ctx2 = document.getElementById('memoryPieChart').getContext('2d');
+        memoryPieChart = new Chart(ctx2, {
+            type: 'doughnut',
+            data: {
+                labels: ['Used', 'Available'],
+                datasets: [{
+                    data: [0, 0],
+                    backgroundColor: [
+                        'rgba(255, 99, 132, 0.8)',
+                        'rgba(75, 192, 192, 0.8)'
+                    ],
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom'
+                    }
+                }
+            }
+        });
+    }
+
+    function updateSystemData(data) {
+        const info = data.system_info;
+        
+        // Update metric cards
+        document.getElementById('memory-usage').textContent = info.memory.percent.toFixed(1) + '%';
+        document.getElementById('memory-total').textContent = formatBytes(info.memory.total);
+        document.getElementById('memory-available').textContent = formatBytes(info.memory.available);
+        document.getElementById('swap-usage').textContent = info.swap.percent.toFixed(1) + '%';
+
+        // Update memory details
+        const memoryDetails = document.getElementById('memory-details');
+        memoryDetails.innerHTML = `
+            <div class="mb-3">
+                <div class="d-flex justify-content-between">
+                    <span>Total</span>
+                    <span>${formatBytes(info.memory.total)}</span>
+                </div>
+            </div>
+            <div class="mb-3">
+                <div class="d-flex justify-content-between">
+                    <span>Used</span>
+                    <span>${formatBytes(info.memory.used)}</span>
+                </div>
+                <div class="progress mt-1">
+                    <div class="progress-bar ${getProgressClass(info.memory.percent)}" 
+                         style="width: ${info.memory.percent}%"></div>
+                </div>
+            </div>
+            <div class="mb-3">
+                <div class="d-flex justify-content-between">
+                    <span>Available</span>
+                    <span>${formatBytes(info.memory.available)}</span>
+                </div>
+            </div>
+            <div class="mb-3">
+                <div class="d-flex justify-content-between">
+                    <span>Free</span>
+                    <span>${formatBytes(info.memory.free)}</span>
+                </div>
+            </div>
+        `;
+
+        // Update swap details
+        const swapDetails = document.getElementById('swap-details');
+        swapDetails.innerHTML = `
+            <div class="mb-3">
+                <div class="d-flex justify-content-between">
+                    <span>Total</span>
+                    <span>${formatBytes(info.swap.total)}</span>
+                </div>
+            </div>
+            <div class="mb-3">
+                <div class="d-flex justify-content-between">
+                    <span>Used</span>
+                    <span>${formatBytes(info.swap.used)}</span>
+                </div>
+                <div class="progress mt-1">
+                    <div class="progress-bar ${getProgressClass(info.swap.percent)}" 
+                         style="width: ${info.swap.percent}%"></div>
+                </div>
+            </div>
+            <div class="mb-3">
+                <div class="d-flex justify-content-between">
+                    <span>Free</span>
+                    <span>${formatBytes(info.swap.free)}</span>
+                </div>
+            </div>
+        `;
+
+        // Update memory chart
+        if (memoryChart && data.history && data.history.memory) {
+            const labels = data.history.memory.map(item => new Date(item.timestamp).toLocaleTimeString());
+            memoryChart.data.labels = labels;
+            memoryChart.data.datasets[0].data = data.history.memory.map(item => item.value);
+            memoryChart.update('none');
+        }
+
+        // Update memory pie chart
+        if (memoryPieChart) {
+            memoryPieChart.data.datasets[0].data = [info.memory.used, info.memory.available];
+            memoryPieChart.update('none');
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        initializeCharts();
+    });
+</script>
+{% endblock %}

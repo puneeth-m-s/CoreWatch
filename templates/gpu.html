@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+
+{% block title %}GPU Monitor - Corewatch{% endblock %}
+{% block page_title %}GPU Monitoring{% endblock %}
+
+{% block content %}
+<div class="row mb-4" id="gpu-metrics">
+    <div class="col-md-12">
+        <div class="alert alert-info" role="alert">
+            <i class="fas fa-info-circle"></i> GPU monitoring requires NVIDIA GPU with nvidia-smi installed.
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-chart-line"></i> GPU Utilization History</h5>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <canvas id="gpuChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-memory"></i> GPU Memory Usage</h5>
+            </div>
+            <div class="card-body" id="gpu-memory-container">
+                <div class="text-muted text-center">No GPU detected</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-tv"></i> GPU Details</h5>
+            </div>
+            <div class="card-body" id="gpu-details">
+                <div class="text-muted text-center">Loading GPU information...</div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let gpuChart;
+
+    function initializeCharts() {
+        const ctx = document.getElementById('gpuChart').getContext('2d');
+        gpuChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: []
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100
+                    }
+                },
+                plugins: {
+                    legend: {
+                        position: 'top'
+                    }
+                }
+            }
+        });
+    }
+
+    function updateSystemData(data) {
+        const info = data.system_info;
+        
+        if (info.gpu && info.gpu.length > 0) {
+            // Update GPU metrics cards
+            const metricsContainer = document.getElementById('gpu-metrics');
+            let metricsHtml = '';
+            
+            info.gpu.forEach((gpu, index) => {
+                metricsHtml += `
+                    <div class="col-md-3 mb-3">
+                        <div class="card metric-card">
+                            <div class="card-body text-center">
+                                <i class="fas fa-tv fa-2x mb-2"></i>
+                                <div class="metric-value">${gpu.utilization.toFixed(1)}%</div>
+                                <div class="metric-label">GPU ${gpu.id} Usage</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <div class="card metric-card">
+                            <div class="card-body text-center">
+                                <i class="fas fa-memory fa-2x mb-2"></i>
+                                <div class="metric-value">${((gpu.memory_used / gpu.memory_total) * 100).toFixed(1)}%</div>
+                                <div class="metric-label">GPU ${gpu.id} Memory</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <div class="card metric-card">
+                            <div class="card-body text-center">
+                                <i class="fas fa-thermometer-half fa-2x mb-2"></i>
+                                <div class="metric-value">${gpu.temperature.toFixed(1)}°C</div>
+                                <div class="metric-label">GPU ${gpu.id} Temp</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            metricsContainer.innerHTML = metricsHtml;
+
+            // Update GPU memory usage
+            const memoryContainer = document.getElementById('gpu-memory-container');
+            let memoryHtml = '';
+            
+            info.gpu.forEach((gpu, index) => {
+                const memoryPercent = (gpu.memory_used / gpu.memory_total) * 100;
+                memoryHtml += `
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between">
+                            <span>GPU ${gpu.id}</span>
+                            <span>${gpu.memory_used.toFixed(0)}MB / ${gpu.memory_total.toFixed(0)}MB</span>
+                        </div>
+                        <div class="progress">
+                            <div class="progress-bar ${getProgressClass(memoryPercent)}" 
+                                 style="width: ${memoryPercent}%"></div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            memoryContainer.innerHTML = memoryHtml;
+
+            // Update GPU details
+            const detailsContainer = document.getElementById('gpu-details');
+            let detailsHtml = '<div class="row">';
+            
+            info.gpu.forEach((gpu, index) => {
+                detailsHtml += `
+                    <div class="col-md-6 mb-3">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6>GPU ${gpu.id}</h6>
+                            </div>
+                            <div class="card-body">
+                                <p><strong>Utilization:</strong> ${gpu.utilization.toFixed(1)}%</p>
+                                <p><strong>Memory Used:</strong> ${gpu.memory_used.toFixed(0)} MB</p>
+                                <p><strong>Memory Total:</strong> ${gpu.memory_total.toFixed(0)} MB</p>
+                                <p><strong>Temperature:</strong> ${gpu.temperature.toFixed(1)}°C</p>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            detailsHtml += '</div>';
+            detailsContainer.innerHTML = detailsHtml;
+
+            // Update GPU chart
+            if (gpuChart && data.history && data.history.gpu) {
+                const labels = data.history.gpu.map(item => new Date(item.timestamp).toLocaleTimeString());
+                gpuChart.data.labels = labels;
+                
+                // Create datasets for each GPU
+                const colors = ['rgb(255, 99, 132)', 'rgb(54, 162, 235)', 'rgb(255, 205, 86)', 'rgb(75, 192, 192)'];
+                gpuChart.data.datasets = [];
+                
+                const gpuCount = info.gpu.length;
+                for (let i = 0; i < gpuCount; i++) {
+                    gpuChart.data.datasets.push({
+                        label: `GPU ${i} Utilization`,
+                        data: data.history.gpu.map(item => {
+                            const gpu = item.gpus.find(g => g.id === i);
+                            return gpu ? gpu.utilization : 0;
+                        }),
+                        borderColor: colors[i % colors.length],
+                        backgroundColor: colors[i % colors.length] + '20',
+                        tension: 0.4
+                    });
+                }
+                
+                gpuChart.update('none');
+            }
+        } else {
+            // No GPU detected
+            document.getElementById('gpu-metrics').innerHTML = `
+                <div class="col-md-12">
+                    <div class="alert alert-warning" role="alert">
+                        <i class="fas fa-exclamation-triangle"></i> No compatible GPU detected or nvidia-smi not available.
+                    </div>
+                </div>
+            `;
+            document.getElementById('gpu-memory-container').innerHTML = '<div class="text-muted text-center">No GPU detected</div>';
+            document.getElementById('gpu-details').innerHTML = '<div class="text-muted text-center">No GPU information available</div>';
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        initializeCharts();
+    });
+</script>
+{% endblock %}

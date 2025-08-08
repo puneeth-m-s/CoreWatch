@@ -1,0 +1,322 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Corewatch{% endblock %}
+{% block page_title %}System Overview{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <!-- CPU Card -->
+    <div class="col-md-3 mb-3">
+        <div class="card metric-card">
+            <div class="card-body text-center">
+                <i class="fas fa-microchip fa-2x mb-2"></i>
+                <div class="metric-value" id="cpu-usage">--</div>
+                <div class="metric-label">CPU Usage</div>
+                <div class="progress mt-2">
+                    <div class="progress-bar" id="cpu-progress" role="progressbar" style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Memory Card -->
+    <div class="col-md-3 mb-3">
+        <div class="card metric-card">
+            <div class="card-body text-center">
+                <i class="fas fa-memory fa-2x mb-2"></i>
+                <div class="metric-value" id="memory-usage">--</div>
+                <div class="metric-label">Memory Usage</div>
+                <div class="progress mt-2">
+                    <div class="progress-bar" id="memory-progress" role="progressbar" style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Disk Card -->
+    <div class="col-md-3 mb-3">
+        <div class="card metric-card">
+            <div class="card-body text-center">
+                <i class="fas fa-hdd fa-2x mb-2"></i>
+                <div class="metric-value" id="disk-usage">--</div>
+                <div class="metric-label">Disk Usage</div>
+                <div class="progress mt-2">
+                    <div class="progress-bar" id="disk-progress" role="progressbar" style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Temperature Card -->
+    <div class="col-md-3 mb-3">
+        <div class="card metric-card">
+            <div class="card-body text-center">
+                <i class="fas fa-thermometer-half fa-2x mb-2"></i>
+                <div class="metric-value" id="temp-value">--</div>
+                <div class="metric-label">Temperature</div>
+                <div class="mt-2" id="temp-status">
+                    <span class="status-indicator status-good"></span>Normal
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <!-- System Performance Chart -->
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-chart-line"></i> System Performance</h5>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <canvas id="performanceChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Active Alerts -->
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-exclamation-triangle"></i> Active Alerts</h5>
+            </div>
+            <div class="card-body" id="alerts-container" style="max-height: 300px; overflow-y: auto;">
+                <div class="text-muted text-center">No active alerts</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- GPU Information -->
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-tv"></i> GPU Status</h5>
+            </div>
+            <div class="card-body" id="gpu-container">
+                <div class="text-muted text-center">Loading GPU information...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Network Activity -->
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-network-wired"></i> Network Activity</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-6 text-center">
+                        <div class="h4 text-success" id="network-sent">--</div>
+                        <small class="text-muted">Bytes Sent</small>
+                    </div>
+                    <div class="col-6 text-center">
+                        <div class="h4 text-primary" id="network-recv">--</div>
+                        <small class="text-muted">Bytes Received</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Battery Status (if available) -->
+<div class="row mt-4" id="battery-row" style="display: none;">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-battery-half"></i> Battery Status</h5>
+            </div>
+            <div class="card-body">
+                <div class="row align-items-center">
+                    <div class="col-md-8">
+                        <div class="progress" style="height: 20px;">
+                            <div class="progress-bar" id="battery-progress" role="progressbar" style="width: 0%"></div>
+                        </div>
+                    </div>
+                    <div class="col-md-4 text-end">
+                        <span id="battery-info" class="h5">--</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let performanceChart;
+
+    function initializeCharts() {
+        const ctx = document.getElementById('performanceChart').getContext('2d');
+        performanceChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+                    {
+                        label: 'CPU %',
+                        data: [],
+                        borderColor: 'rgb(255, 99, 132)',
+                        backgroundColor: 'rgba(255, 99, 132, 0.1)',
+                        tension: 0.4
+                    },
+                    {
+                        label: 'Memory %',
+                        data: [],
+                        borderColor: 'rgb(54, 162, 235)',
+                        backgroundColor: 'rgba(54, 162, 235, 0.1)',
+                        tension: 0.4
+                    },
+                    {
+                        label: 'Disk %',
+                        data: [],
+                        borderColor: 'rgb(255, 205, 86)',
+                        backgroundColor: 'rgba(255, 205, 86, 0.1)',
+                        tension: 0.4
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100
+                    }
+                },
+                plugins: {
+                    legend: {
+                        position: 'top',
+                    }
+                }
+            }
+        });
+    }
+
+    function updateSystemData(data) {
+        const info = data.system_info;
+        
+        // Update metric cards
+        document.getElementById('cpu-usage').textContent = info.cpu.percent.toFixed(1) + '%';
+        document.getElementById('cpu-progress').style.width = info.cpu.percent + '%';
+        document.getElementById('cpu-progress').className = 'progress-bar ' + getProgressClass(info.cpu.percent);
+
+        document.getElementById('memory-usage').textContent = info.memory.percent.toFixed(1) + '%';
+        document.getElementById('memory-progress').style.width = info.memory.percent + '%';
+        document.getElementById('memory-progress').className = 'progress-bar ' + getProgressClass(info.memory.percent);
+
+        document.getElementById('disk-usage').textContent = info.disk.percent.toFixed(1) + '%';
+        document.getElementById('disk-progress').style.width = info.disk.percent + '%';
+        document.getElementById('disk-progress').className = 'progress-bar ' + getProgressClass(info.disk.percent);
+
+        // Update temperature
+        let maxTemp = 0;
+        for (const [sensorName, sensors] of Object.entries(info.temperatures)) {
+            for (const sensor of sensors) {
+                maxTemp = Math.max(maxTemp, sensor.current);
+            }
+        }
+        
+        if (maxTemp > 0) {
+            document.getElementById('temp-value').textContent = maxTemp.toFixed(1) + '°C';
+            const tempStatus = document.getElementById('temp-status');
+            if (maxTemp > 40) {
+                tempStatus.innerHTML = '<span class="status-indicator status-critical"></span>High';
+            } else if (maxTemp > 30) {
+                tempStatus.innerHTML = '<span class="status-indicator status-warning"></span>Warm';
+            } else {
+                tempStatus.innerHTML = '<span class="status-indicator status-good"></span>Normal';
+            }
+        }
+
+        // Update GPU information
+        const gpuContainer = document.getElementById('gpu-container');
+        if (info.gpu && info.gpu.length > 0) {
+            let gpuHtml = '';
+            info.gpu.forEach((gpu, index) => {
+                gpuHtml += `
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between">
+                            <span>GPU ${gpu.id}</span>
+                            <span>${gpu.utilization.toFixed(1)}%</span>
+                        </div>
+                        <div class="progress">
+                            <div class="progress-bar ${getProgressClass(gpu.utilization)}" 
+                                 style="width: ${gpu.utilization}%"></div>
+                        </div>
+                        <small class="text-muted">Memory: ${gpu.memory_used.toFixed(0)}MB / ${gpu.memory_total.toFixed(0)}MB</small>
+                    </div>
+                `;
+            });
+            gpuContainer.innerHTML = gpuHtml;
+        } else {
+            gpuContainer.innerHTML = '<div class="text-muted text-center">No GPU detected</div>';
+        }
+
+        // Update network information
+        if (info.network.io) {
+            document.getElementById('network-sent').textContent = formatBytes(info.network.io.bytes_sent);
+            document.getElementById('network-recv').textContent = formatBytes(info.network.io.bytes_recv);
+        }
+
+        // Update battery information
+        if (info.battery) {
+            document.getElementById('battery-row').style.display = 'block';
+            const batteryProgress = document.getElementById('battery-progress');
+            batteryProgress.style.width = info.battery.percent + '%';
+            batteryProgress.className = 'progress-bar ' + getProgressClass(100 - info.battery.percent);
+            
+            let batteryText = info.battery.percent.toFixed(1) + '%';
+            if (info.battery.power_plugged) {
+                batteryText += ' (Charging)';
+            } else if (info.battery.secsleft) {
+                const hours = Math.floor(info.battery.secsleft / 3600);
+                const minutes = Math.floor((info.battery.secsleft % 3600) / 60);
+                batteryText += ` (${hours}h ${minutes}m remaining)`;
+            }
+            document.getElementById('battery-info').textContent = batteryText;
+        }
+
+        // Update alerts
+        const alertsContainer = document.getElementById('alerts-container');
+        if (data.alerts && data.alerts.length > 0) {
+            let alertsHtml = '';
+            data.alerts.forEach(alert => {
+                const alertClass = alert.severity === 'critical' ? 'alert-danger' : 'alert-warning';
+                alertsHtml += `
+                    <div class="alert ${alertClass} alert-dismissible fade show" role="alert">
+                        <strong>${alert.type.toUpperCase()}:</strong> ${alert.message}
+                        <br><small>${new Date(alert.timestamp).toLocaleTimeString()}</small>
+                    </div>
+                `;
+            });
+            alertsContainer.innerHTML = alertsHtml;
+        } else {
+            alertsContainer.innerHTML = '<div class="text-muted text-center">No active alerts</div>';
+        }
+
+        // Update performance chart
+        if (performanceChart && data.history) {
+            const labels = data.history.cpu.map(item => new Date(item.timestamp).toLocaleTimeString());
+            performanceChart.data.labels = labels;
+            performanceChart.data.datasets[0].data = data.history.cpu.map(item => item.value);
+            performanceChart.data.datasets[1].data = data.history.memory.map(item => item.value);
+            performanceChart.data.datasets[2].data = data.history.disk.map(item => item.value);
+            performanceChart.update('none');
+        }
+    }
+
+    // Initialize charts when page loads
+    document.addEventListener('DOMContentLoaded', function() {
+        initializeCharts();
+    });
+</script>
+{% endblock %}

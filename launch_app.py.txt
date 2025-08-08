@@ -1,0 +1,61 @@
+@echo off
+title System Monitor - Desktop App Setup
+color 0E
+
+echo.
+echo ================================================
+echo    System Monitor Dashboard - Desktop Setup
+echo ================================================
+echo.
+
+REM Get current directory
+set "CURRENT_DIR=%~dp0"
+cd /d "%CURRENT_DIR%"
+
+echo [1/4] Checking Python installation...
+python --version >nul 2>&1
+if errorlevel 1 (
+    echo ERROR: Python is not installed!
+    echo Please install Python from https://python.org
+    pause
+    exit /b 1
+)
+echo ✓ Python found!
+
+echo.
+echo [2/4] Installing required packages...
+python scripts/install_requirements.py
+if errorlevel 1 (
+    echo ERROR: Failed to install requirements
+    pause
+    exit /b 1
+)
+echo ✓ Packages installed!
+
+echo.
+echo [3/4] Creating launcher scripts...
+python create_launcher.py
+echo ✓ Launchers created!
+
+echo.
+echo [4/4] Testing dashboard...
+echo Starting dashboard for 5 seconds to test...
+timeout /t 2 /nobreak >nul
+start /min python app.py
+timeout /t 5 /nobreak >nul
+taskkill /f /im python.exe >nul 2>&1
+
+echo.
+echo ================================================
+echo           SETUP COMPLETE! 🎉
+echo ================================================
+echo.
+echo Your System Monitor Dashboard is ready!
+echo.
+echo To launch:
+echo   • Double-click "launch_monitor.bat"
+echo   • Or use the desktop shortcut
+echo.
+echo Dashboard URL: http://localhost:5000
+echo.
+pause

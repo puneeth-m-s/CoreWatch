@@ -1,0 +1,269 @@
+{% extends "base.html" %}
+
+{% block title %}Disk Monitor - Corewatch{% endblock %}
+{% block page_title %}Disk Monitoring{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="card-body text-center">
+                <i class="fas fa-hdd fa-2x mb-2"></i>
+                <div class="metric-value" id="disk-usage">--</div>
+                <div class="metric-label">Disk Usage</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="card-body text-center">
+                <i class="fas fa-database fa-2x mb-2"></i>
+                <div class="metric-value" id="disk-total">--</div>
+                <div class="metric-label">Total Space</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="card-body text-center">
+                <i class="fas fa-check-circle fa-2x mb-2"></i>
+                <div class="metric-value" id="disk-free">--</div>
+                <div class="metric-label">Free Space</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="card-body text-center">
+                <i class="fas fa-tachometer-alt fa-2x mb-2"></i>
+                <div class="metric-value" id="disk-io">--</div>
+                <div class="metric-label">I/O Activity</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-chart-line"></i> Disk I/O Activity</h5>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <canvas id="diskChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-chart-pie"></i> Disk Usage</h5>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <canvas id="diskPieChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-info-circle"></i> Disk Information</h5>
+            </div>
+            <div class="card-body" id="disk-details">
+                <div class="text-muted text-center">Loading...</div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let diskChart, diskPieChart;
+
+    function initializeCharts() {
+        // Disk I/O chart
+        const ctx1 = document.getElementById('diskChart').getContext('2d');
+        diskChart = new Chart(ctx1, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+                    {
+                        label: 'Read Bytes/sec',
+                        data: [],
+                        borderColor: 'rgb(75, 192, 192)',
+                        backgroundColor: 'rgba(75, 192, 192, 0.1)',
+                        tension: 0.4
+                    },
+                    {
+                        label: 'Write Bytes/sec',
+                        data: [],
+                        borderColor: 'rgb(255, 99, 132)',
+                        backgroundColor: 'rgba(255, 99, 132, 0.1)',
+                        tension: 0.4
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                },
+                plugins: {
+                    legend: {
+                        position: 'top'
+                    }
+                }
+            }
+        });
+
+        // Disk usage pie chart
+        const ctx2 = document.getElementById('diskPieChart').getContext('2d');
+        diskPieChart = new Chart(ctx2, {
+            type: 'doughnut',
+            data: {
+                labels: ['Used', 'Free'],
+                datasets: [{
+                    data: [0, 0],
+                    backgroundColor: [
+                        'rgba(255, 99, 132, 0.8)',
+                        'rgba(75, 192, 192, 0.8)'
+                    ],
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom'
+                    }
+                }
+            }
+        });
+    }
+
+    function updateSystemData(data) {
+        const info = data.system_info;
+        
+        // Update metric cards
+        document.getElementById('disk-usage').textContent = info.disk.percent.toFixed(1) + '%';
+        document.getElementById('disk-total').textContent = formatBytes(info.disk.total);
+        document.getElementById('disk-free').textContent = formatBytes(info.disk.free);
+        
+        if (info.disk.io) {
+            document.getElementById('disk-io').textContent = 'Active';
+        } else {
+            document.getElementById('disk-io').textContent = 'Inactive';
+        }
+
+        // Update disk details
+        const detailsContainer = document.getElementById('disk-details');
+        let detailsHtml = `
+            <div class="row">
+                <div class="col-md-6">
+                    <h6>Storage Information</h6>
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between">
+                            <span>Total Space</span>
+                            <span>${formatBytes(info.disk.total)}</span>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between">
+                            <span>Used Space</span>
+                            <span>${formatBytes(info.disk.used)}</span>
+                        </div>
+                        <div class="progress mt-1">
+                            <div class="progress-bar ${getProgressClass(info.disk.percent)}" 
+                                 style="width: ${info.disk.percent}%"></div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between">
+                            <span>Free Space</span>
+                            <span>${formatBytes(info.disk.free)}</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+        `;
+        
+        if (info.disk.io) {
+            detailsHtml += `
+                    <h6>I/O Statistics</h6>
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between">
+                            <span>Read Count</span>
+                            <span>${info.disk.io.read_count.toLocaleString()}</span>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between">
+                            <span>Write Count</span>
+                            <span>${info.disk.io.write_count.toLocaleString()}</span>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between">
+                            <span>Read Bytes</span>
+                            <span>${formatBytes(info.disk.io.read_bytes)}</span>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between">
+                            <span>Write Bytes</span>
+                            <span>${formatBytes(info.disk.io.write_bytes)}</span>
+                        </div>
+                    </div>
+            `;
+        } else {
+            detailsHtml += `
+                    <h6>I/O Statistics</h6>
+                    <div class="alert alert-info" role="alert">
+                        <i class="fas fa-info-circle"></i> Disk I/O statistics not available
+                    </div>
+            `;
+        }
+        
+        detailsHtml += `
+                </div>
+            </div>
+        `;
+        
+        detailsContainer.innerHTML = detailsHtml;
+
+        // Update disk pie chart
+        if (diskPieChart) {
+            diskPieChart.data.datasets[0].data = [info.disk.used, info.disk.free];
+            diskPieChart.update('none');
+        }
+
+        // Update disk I/O chart (simplified version)
+        if (diskChart && data.history && data.history.disk) {
+            const labels = data.history.disk.map(item => new Date(item.timestamp).toLocaleTimeString());
+            diskChart.data.labels = labels;
+            // For simplicity, we'll show disk usage percentage as activity
+            diskChart.data.datasets[0].data = data.history.disk.map(item => item.value);
+            diskChart.data.datasets[1].data = data.history.disk.map(item => Math.max(0, item.value - 10)); // Simulated write activity
+            diskChart.update('none');
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        initializeCharts();
+    });
+</script>
+{% endblock %}
