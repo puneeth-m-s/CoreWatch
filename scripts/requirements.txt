@@ -3,3 +3,8 @@ Flask-SocketIO==5.3.6
 psutil==5.9.6
 python-socketio==5.9.0
 python-engineio==4.7.1
+tensorflow>=2.11
+scikit-learn
+pandas
+numpy
+

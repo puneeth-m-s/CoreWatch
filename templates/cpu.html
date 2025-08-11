@@ -5,6 +5,7 @@
 
 {% block content %}
 <div class="row mb-4">
+    <!-- Metric cards -->
     <div class="col-md-3">
         <div class="card metric-card">
             <div class="card-body text-center">
@@ -44,6 +45,7 @@
 </div>
 
 <div class="row mb-4">
+    <!-- CPU usage history chart -->
     <div class="col-md-8">
         <div class="card">
             <div class="card-header">
@@ -56,6 +58,7 @@
             </div>
         </div>
     </div>
+    <!-- Per-core usage -->
     <div class="col-md-4">
         <div class="card">
             <div class="card-header">
@@ -69,8 +72,9 @@
 </div>
 
 <div class="row">
-    <div class="col-md-12">
-        <div class="card">
+    <!-- CPU Info -->
+    <div class="col-md-6">
+        <div class="card mb-4">
             <div class="card-header">
                 <h5><i class="fas fa-info-circle"></i> CPU Information</h5>
             </div>
@@ -78,6 +82,29 @@
                 <div class="row" id="cpu-info">
                     <div class="text-muted text-center">Loading CPU information...</div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Top CPU Processes -->
+    <div class="col-md-6">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5><i class="fas fa-tasks"></i> Top CPU Processes</h5>
+            </div>
+            <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                <table class="table table-sm table-striped" id="cpu-table">
+                    <thead>
+                        <tr>
+                            <th>PID</th>
+                            <th>Process</th>
+                            <th>CPU %</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td colspan="3" class="text-center text-muted">Loading...</td></tr>
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>
@@ -124,7 +151,6 @@
     function updateSystemData(data) {
         const info = data.system_info;
         
-        // Update metric cards
         document.getElementById('cpu-usage').textContent = info.cpu.percent.toFixed(1) + '%';
         document.getElementById('cpu-cores').textContent = info.cpu.count;
         
@@ -132,7 +158,6 @@
             document.getElementById('cpu-freq').textContent = info.cpu.frequency.current.toFixed(0);
         }
 
-        // Update temperature
         let cpuTemp = '--';
         for (const [sensorName, sensors] of Object.entries(info.temperatures)) {
             if (sensorName.toLowerCase().includes('cpu') || sensorName.toLowerCase().includes('core')) {
@@ -145,7 +170,6 @@
         }
         document.getElementById('cpu-temp').textContent = cpuTemp;
 
-        // Update per-core usage
         const perCoreContainer = document.getElementById('per-core-usage');
         if (info.cpu.per_cpu && info.cpu.per_cpu.length > 0) {
             let coreHtml = '';
@@ -157,8 +181,7 @@
                             <span>${usage.toFixed(1)}%</span>
                         </div>
                         <div class="progress">
-                            <div class="progress-bar ${getProgressClass(usage)}" 
-                                 style="width: ${usage}%"></div>
+                            <div class="progress-bar ${getProgressClass(usage)}" style="width: ${usage}%"></div>
                         </div>
                     </div>
                 `;
@@ -166,7 +189,6 @@
             perCoreContainer.innerHTML = coreHtml;
         }
 
-        // Update CPU information
         const cpuInfoContainer = document.getElementById('cpu-info');
         cpuInfoContainer.innerHTML = `
             <div class="col-md-6">
@@ -185,7 +207,6 @@
             </div>
         `;
 
-        // Update CPU chart
         if (cpuChart && data.history && data.history.cpu) {
             const labels = data.history.cpu.map(item => new Date(item.timestamp).toLocaleTimeString());
             cpuChart.data.labels = labels;
@@ -194,8 +215,34 @@
         }
     }
 
+    function loadProcesses() {
+        fetch('/cpu_processes')
+            .then(response => response.json())
+            .then(data => {
+                let tbody = document.querySelector('#cpu-table tbody');
+                tbody.innerHTML = '';
+                data.sort((a, b) => b.cpu_percent - a.cpu_percent)
+                    .forEach(proc => {
+                        tbody.innerHTML += `
+                            <tr>
+                                <td>${proc.pid}</td>
+                                <td>${proc.name}</td>
+                                <td>${proc.cpu_percent.toFixed(1)}</td>
+                            </tr>
+                        `;
+                    });
+            });
+    }
+
+    function getProgressClass(value) {
+        if (value >= 80) return 'bg-danger';
+        if (value >= 50) return 'bg-warning';
+        return 'bg-success';
+    }
+
     document.addEventListener('DOMContentLoaded', function() {
         initializeCharts();
+        setInterval(loadProcesses, 2000);
     });
 </script>
 {% endblock %}
