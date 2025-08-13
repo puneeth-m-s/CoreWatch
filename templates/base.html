@@ -176,9 +176,6 @@
     <script>
         // Global variables
         let socket;
-        let charts = {};
-        let systemData = {};
-        let alertsShown = new Set();
 
         // Initialize Socket.IO connection
         function initializeSocket() {
@@ -194,10 +191,17 @@
                 document.getElementById('connection-status').className = 'badge bg-danger me-2';
             });
             
+            socket.on('initial_data', function(data) {
+                if (typeof initializePageData === 'function') {
+                    initializePageData(data);
+                }
+            });
+
             socket.on('system_update', function(data) {
-                systemData = data;
                 updateLastUpdateTime();
-                updateSystemData(data);
+                if (typeof updatePageData === 'function') {
+                    updatePageData(data);
+                }
                 checkForNewAlerts(data.alerts);
             });
         }
@@ -207,7 +211,9 @@
             document.getElementById('update-time').textContent = now.toLocaleTimeString();
         }
 
+        let alertsShown = new Set();
         function checkForNewAlerts(alerts) {
+            if (!alerts) return;
             alerts.forEach(alert => {
                 const alertKey = `${alert.type}_${alert.message}`;
                 if (!alertsShown.has(alertKey) && alert.severity === 'critical') {
@@ -237,12 +243,6 @@
             return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
         }
 
-        function getStatusClass(percentage) {
-            if (percentage < 60) return 'status-good';
-            if (percentage < 85) return 'status-warning';
-            return 'status-critical';
-        }
-
         function getProgressClass(percentage) {
             if (percentage < 60) return 'bg-success';
             if (percentage < 85) return 'bg-warning';
@@ -262,9 +262,12 @@
             });
         });
 
-        // Page-specific update function (to be overridden)
-        function updateSystemData(data) {
-            // Override this function in individual pages
+        // Page-specific functions (to be overridden by child templates)
+        function initializePageData(data) {
+            // For initial data load (e.g., chart history)
+        }
+        function updatePageData(data) {
+            // For real-time data updates
         }
     </script>
     {% block scripts %}{% endblock %}

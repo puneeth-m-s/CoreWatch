@@ -42,6 +42,7 @@
             </div>
         </div>
     </div>
+    
 </div>
 
 <div class="row mb-4">
@@ -115,42 +116,51 @@
 <script>
     let cpuChart;
 
-    function initializeCharts() {
+    function initializePageData(data) {
         const ctx = document.getElementById('cpuChart').getContext('2d');
         cpuChart = new Chart(ctx, {
             type: 'line',
             data: {
-                labels: [],
-                datasets: [{
-                    label: 'CPU Usage %',
-                    data: [],
-                    borderColor: 'rgb(255, 99, 132)',
-                    backgroundColor: 'rgba(255, 99, 132, 0.1)',
-                    tension: 0.4,
-                    fill: true
-                }]
+                labels: data.history.cpu.map(item => new Date(item.timestamp).toLocaleTimeString()),
+                datasets: [
+                    {
+                        label: 'CPU Usage %',
+                        data: data.history.cpu.map(item => item.value),
+                        borderColor: 'rgb(255, 99, 132)',
+                        backgroundColor: 'rgba(255, 99, 132, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    },
+                    {
+                        label: 'Predicted CPU %',
+                        data: [], // Will be populated later
+                        borderColor: 'rgb(54, 162, 235)',
+                        backgroundColor: 'rgba(54, 162, 235, 0.1)',
+                        tension: 0.4,
+                        borderDash: [5, 5],
+                        fill: false
+                    }
+                ]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                animation: false,
                 scales: {
                     y: {
                         beginAtZero: true,
                         max: 100
                     }
-                },
-                plugins: {
-                    legend: {
-                        display: false
-                    }
                 }
             }
         });
+        updatePageData(data); // Initial data update
     }
 
-    function updateSystemData(data) {
+    function updatePageData(data) {
         const info = data.system_info;
         
+        // CPU basic info
         document.getElementById('cpu-usage').textContent = info.cpu.percent.toFixed(1) + '%';
         document.getElementById('cpu-cores').textContent = info.cpu.count;
         
@@ -158,18 +168,22 @@
             document.getElementById('cpu-freq').textContent = info.cpu.frequency.current.toFixed(0);
         }
 
+        // CPU temperature
         let cpuTemp = '--';
-        for (const [sensorName, sensors] of Object.entries(info.temperatures)) {
-            if (sensorName.toLowerCase().includes('cpu') || sensorName.toLowerCase().includes('core')) {
-                for (const sensor of sensors) {
-                    cpuTemp = sensor.current.toFixed(1) + '°C';
+        if (info.temperatures) {
+            for (const [sensorName, sensors] of Object.entries(info.temperatures)) {
+                if (sensorName.toLowerCase().includes('cpu') || sensorName.toLowerCase().includes('core')) {
+                    for (const sensor of sensors) {
+                        cpuTemp = sensor.current.toFixed(1) + '°C';
+                        break;
+                    }
                     break;
                 }
-                break;
             }
         }
         document.getElementById('cpu-temp').textContent = cpuTemp;
 
+        // Per-core usage
         const perCoreContainer = document.getElementById('per-core-usage');
         if (info.cpu.per_cpu && info.cpu.per_cpu.length > 0) {
             let coreHtml = '';
@@ -189,28 +203,47 @@
             perCoreContainer.innerHTML = coreHtml;
         }
 
+        // CPU Info block
         const cpuInfoContainer = document.getElementById('cpu-info');
         cpuInfoContainer.innerHTML = `
             <div class="col-md-6">
                 <h6>Processor</h6>
                 <p class="text-muted">${info.system.processor || 'Unknown'}</p>
-                
                 <h6>Architecture</h6>
                 <p class="text-muted">${info.system.architecture ? info.system.architecture.join(', ') : 'Unknown'}</p>
             </div>
             <div class="col-md-6">
                 <h6>Platform</h6>
                 <p class="text-muted">${info.system.platform}</p>
-                
                 <h6>Boot Time</h6>
                 <p class="text-muted">${new Date(info.system.boot_time * 1000).toLocaleString()}</p>
             </div>
         `;
 
+        // Update chart efficiently
         if (cpuChart && data.history && data.history.cpu) {
-            const labels = data.history.cpu.map(item => new Date(item.timestamp).toLocaleTimeString());
-            cpuChart.data.labels = labels;
-            cpuChart.data.datasets[0].data = data.history.cpu.map(item => item.value);
+            const newLabel = new Date(data.system_info.timestamp).toLocaleTimeString();
+            
+            cpuChart.data.labels.push(newLabel);
+            cpuChart.data.datasets[0].data.push(data.system_info.cpu.percent);
+
+            // Handle predictions
+            if (data.history.cpu_predictions && data.history.cpu_predictions.length > 0) {
+                const lastActualDataIndex = cpuChart.data.datasets[0].data.length - 1;
+                const predictionLine = new Array(lastActualDataIndex).fill(null);
+                predictionLine.push(cpuChart.data.datasets[0].data[lastActualDataIndex]);
+                predictionLine.push(...data.history.cpu_predictions);
+                
+                cpuChart.data.datasets[1].data = predictionLine;
+            }
+
+            if (cpuChart.data.labels.length > 30) {
+                cpuChart.data.labels.shift();
+                cpuChart.data.datasets.forEach(dataset => {
+                    dataset.data.shift();
+                });
+            }
+            
             cpuChart.update('none');
         }
     }
@@ -221,28 +254,21 @@
             .then(data => {
                 let tbody = document.querySelector('#cpu-table tbody');
                 tbody.innerHTML = '';
-                data.sort((a, b) => b.cpu_percent - a.cpu_percent)
-                    .forEach(proc => {
-                        tbody.innerHTML += `
-                            <tr>
-                                <td>${proc.pid}</td>
-                                <td>${proc.name}</td>
-                                <td>${proc.cpu_percent.toFixed(1)}</td>
-                            </tr>
-                        `;
-                    });
+                data.forEach(proc => {
+                    tbody.innerHTML += `
+                        <tr>
+                            <td>${proc.pid}</td>
+                            <td>${proc.name}</td>
+                            <td>${proc.cpu_percent.toFixed(1)}</td>
+                        </tr>
+                    `;
+                });
             });
     }
 
-    function getProgressClass(value) {
-        if (value >= 80) return 'bg-danger';
-        if (value >= 50) return 'bg-warning';
-        return 'bg-success';
-    }
-
     document.addEventListener('DOMContentLoaded', function() {
-        initializeCharts();
-        setInterval(loadProcesses, 2000);
+        loadProcesses();
+        setInterval(loadProcesses, 5000); // Update processes less frequently
     });
 </script>
 {% endblock %}

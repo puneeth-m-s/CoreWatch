@@ -153,30 +153,30 @@
 <script>
     let performanceChart;
 
-    function initializeCharts() {
+    function initializePageData(data) {
         const ctx = document.getElementById('performanceChart').getContext('2d');
         performanceChart = new Chart(ctx, {
             type: 'line',
             data: {
-                labels: [],
+                labels: data.history.cpu.map(item => new Date(item.timestamp).toLocaleTimeString()),
                 datasets: [
                     {
                         label: 'CPU %',
-                        data: [],
+                        data: data.history.cpu.map(item => item.value),
                         borderColor: 'rgb(255, 99, 132)',
                         backgroundColor: 'rgba(255, 99, 132, 0.1)',
                         tension: 0.4
                     },
                     {
                         label: 'Memory %',
-                        data: [],
+                        data: data.history.memory.map(item => item.value),
                         borderColor: 'rgb(54, 162, 235)',
                         backgroundColor: 'rgba(54, 162, 235, 0.1)',
                         tension: 0.4
                     },
                     {
                         label: 'Disk %',
-                        data: [],
+                        data: data.history.disk.map(item => item.value),
                         borderColor: 'rgb(255, 205, 86)',
                         backgroundColor: 'rgba(255, 205, 86, 0.1)',
                         tension: 0.4
@@ -186,6 +186,7 @@
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                animation: false, // Disable animation for performance
                 scales: {
                     y: {
                         beginAtZero: true,
@@ -201,7 +202,7 @@
         });
     }
 
-    function updateSystemData(data) {
+    function updatePageData(data) {
         const info = data.system_info;
         
         // Update metric cards
@@ -219,9 +220,11 @@
 
         // Update temperature
         let maxTemp = 0;
-        for (const [sensorName, sensors] of Object.entries(info.temperatures)) {
-            for (const sensor of sensors) {
-                maxTemp = Math.max(maxTemp, sensor.current);
+        if (info.temperatures) {
+            for (const [sensorName, sensors] of Object.entries(info.temperatures)) {
+                for (const sensor of sensors) {
+                    maxTemp = Math.max(maxTemp, sensor.current);
+                }
             }
         }
         
@@ -303,20 +306,31 @@
             alertsContainer.innerHTML = '<div class="text-muted text-center">No active alerts</div>';
         }
 
-        // Update performance chart
+        // Update performance chart efficiently
         if (performanceChart && data.history) {
-            const labels = data.history.cpu.map(item => new Date(item.timestamp).toLocaleTimeString());
-            performanceChart.data.labels = labels;
-            performanceChart.data.datasets[0].data = data.history.cpu.map(item => item.value);
-            performanceChart.data.datasets[1].data = data.history.memory.map(item => item.value);
-            performanceChart.data.datasets[2].data = data.history.disk.map(item => item.value);
-            performanceChart.update('none');
+            const newLabel = new Date(data.system_info.timestamp).toLocaleTimeString();
+            
+            performanceChart.data.labels.push(newLabel);
+            performanceChart.data.datasets[0].data.push(data.system_info.cpu.percent);
+            performanceChart.data.datasets[1].data.push(data.system_info.memory.percent);
+            performanceChart.data.datasets[2].data.push(data.system_info.disk.percent);
+
+            // Keep the chart history to a reasonable length
+            if (performanceChart.data.labels.length > 30) {
+                performanceChart.data.labels.shift();
+                performanceChart.data.datasets.forEach(dataset => {
+                    dataset.data.shift();
+                });
+            }
+            
+            performanceChart.update('none'); // Use 'none' for no animation
         }
     }
 
     // Initialize charts when page loads
     document.addEventListener('DOMContentLoaded', function() {
-        initializeCharts();
+        // The `initializePageData` function will be called by the socket connection
+        // once the initial data is received.
     });
 </script>
 {% endblock %}
